@@ -9,12 +9,7 @@
 [mitm]
 hostname = t.me, telegram.me
  */
-/*
- TG 链接重定向 - QuanX 可用
- @supported Quantumult X
- @run-at request
- @author 你
-*/
+
 
 let apps = {
   "Telegram": "tg://resolve?domain=",
