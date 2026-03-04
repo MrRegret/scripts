@@ -8,7 +8,7 @@
 
   [rewrite_local]
   # 跳转到 Telegram（默认），静默直跳
-  ^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.boxjs.json, tag=TG重定向
+  ^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js, tag=TG重定向
 
 
   [MITM]
