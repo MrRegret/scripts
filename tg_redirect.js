@@ -1,31 +1,40 @@
-
+/******************************
+/******************************
+*************************
+[mitm]
+hostname = t.me, telegram.me
+[rewrite_local]
+^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js
+*************************
+*****************************************/
 function parseArgument(arg) {
-  if (typeof arg === 'object' && arg) return arg;
-  const result = {};
-  const str = String(arg || '');
-  if (!str) return result;
-  for (const pair of str.split('&')) {
-    if (!pair) continue;
-    const eqIdx = pair.indexOf('=');
-    if (eqIdx < 0) continue;
-    const key = decodeURIComponent(pair.slice(0, eqIdx));
-    const val = decodeURIComponent(pair.slice(eqIdx + 1));
-    result[key] = val;
-  }
+  var result = {};
+  if (!arg || typeof arg !== 'string') return result;
+  arg.split('&').forEach(function(pair) {
+    var idx = pair.indexOf('=');
+    if (idx < 0) return;
+    var k = decodeURIComponent(pair.slice(0, idx));
+    var v = decodeURIComponent(pair.slice(idx + 1));
+    result[k] = v;
+  });
   return result;
 }
 
-function isAllDigits(str) {
-  if (!str) return false;
-  for (let i = 0; i < str.length; i++) {
-    const c = str.charCodeAt(i);
-    if (c < 48 || c > 57) return false; // '0'~'9'
+/**
+ * 读取持久化存储
+ * QuantumultX 用 $prefs.valueForKey()
+ */
+function readPref(key) {
+  try {
+    return $prefs.valueForKey(key) || null;
+  } catch(e) {
+    return null;
   }
-  return true;
 }
 
-function escapeHtml(str) {
-  return String(str)
+/** HTML 实体转义 */
+function esc(str) {
+  return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -33,233 +42,196 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-function appendPlatformParam(href) {
-  try {
-    const u = new URL(href);
-    u.searchParams.set('tgWebAppPlatform', '0');
-    return u.toString();
-  } catch {
-    return href + (href.includes('?') ? '&' : '?') + 'tgWebAppPlatform=0';
-  }
+/** 判断字符串是否为纯数字（消息 ID 用） */
+function isDigits(s) {
+  return s && /^\d+$/.test(s);
 }
 
+// ─── 核心：将 t.me URL 转换为客户端深链 ─────────────────────────
 
-function buildTargetUrl(scheme, parsedUrl) {
-  const rawPath = String(parsedUrl.pathname || '/');
-  const segments = rawPath.split('/').filter(Boolean);
+/**
+ * @param {string} scheme  如 'tg'、'sg' 等
+ * @param {URL}    u       已解析的请求 URL 对象
+ * @returns {string|null}
+ */
+function buildDeepLink(scheme, u) {
+  var parts = u.pathname.split('/').filter(Boolean);
 
-  if (!segments.length) return null;
+  // /s/username → 去掉频道预览前缀 's'
+  if (parts[0] === 's' && parts.length > 1) parts.shift();
 
+  if (!parts.length) return null;
 
-  if (segments[0] === 's' && segments.length > 1) {
-    segments.shift();
+  var p0 = parts[0];
+
+  // ── 邀请链接：/+xxxxxxxx（hash 含字母，非纯数字）
+  if (p0.charAt(0) === '+' && p0.length > 1 && !isDigits(p0.slice(1))) {
+    return scheme + '://join?invite=' + encodeURIComponent(p0.slice(1));
   }
 
-  const first = segments[0];
-
-  if (first && isAllDigits(first.slice(1)) && first[0] === '+' && first.length > 1) {
-
-    return `${scheme}://join?invite=${encodeURIComponent(first.slice(1))}`;
+  // ── 电话号码：/+1234567890（纯数字）
+  if (p0.charAt(0) === '+' && isDigits(p0.slice(1))) {
+    return scheme + '://resolve?phone=' + encodeURIComponent(p0.slice(1));
   }
 
-  if (first === 'addstickers' && segments[1]) {
-    return `${scheme}://addstickers?set=${encodeURIComponent(segments[1])}`;
+  // ── 贴纸包：/addstickers/PackName
+  if (p0 === 'addstickers' && parts[1]) {
+    return scheme + '://addstickers?set=' + encodeURIComponent(parts[1]);
   }
 
-
-  if (first === 'share' && segments[1] === 'url') {
-    const parts = [];
-    const urlParam = parsedUrl.searchParams.get('url');
-    const textParam = parsedUrl.searchParams.get('text');
-    if (urlParam) parts.push('url=' + encodeURIComponent(urlParam));
-    if (textParam) parts.push('text=' + encodeURIComponent(textParam));
-    return `${scheme}://msg_url?${parts.join('&')}`;
+  // ── 表情包：/addemoji/PackName
+  if (p0 === 'addemoji' && parts[1]) {
+    return scheme + '://addemoji?set=' + encodeURIComponent(parts[1]);
   }
 
-
-  if (
-    first === 'c' &&
-    segments[1] && isAllDigits(segments[1]) &&
-    segments[2] && isAllDigits(segments[2])
-  ) {
-    return `${scheme}://privatepost?channel=${segments[1]}&post=${segments[2]}`;
+  // ── 分享：/share/url?url=...&text=...
+  if (p0 === 'share' && parts[1] === 'url') {
+    var urlParam  = u.searchParams.get('url');
+    var textParam = u.searchParams.get('text');
+    var q = [];
+    if (urlParam)  q.push('url='  + encodeURIComponent(urlParam));
+    if (textParam) q.push('text=' + encodeURIComponent(textParam));
+    return scheme + '://msg_url?' + q.join('&');
   }
 
-
-  const username = first;
-  if (!username) return null;
-
-  const params = [`domain=${encodeURIComponent(username)}`];
-  if (segments[1] && isAllDigits(segments[1])) {
-    params.push(`post=${segments[1]}`);
+  // ── 私有频道消息：/c/channelId/msgId
+  if (p0 === 'c' && isDigits(parts[1]) && isDigits(parts[2])) {
+    return scheme + '://privatepost?channel=' + parts[1] + '&post=' + parts[2];
   }
 
+  // ── 普通用户名 / 公开频道（可选消息 ID、评论 ID）
+  var q2 = ['domain=' + encodeURIComponent(p0)];
+  if (isDigits(parts[1])) {
+    q2.push('post=' + parts[1]);
+    if (isDigits(parts[2])) q2.push('comment=' + parts[2]);
+  }
 
-  parsedUrl.searchParams.forEach((v, k) => {
-    params.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  // 透传常见查询参数
+  ['start', 'startgroup', 'game', 'voicechat', 'boost'].forEach(function(key) {
+    var v = u.searchParams.get(key);
+    if (v) q2.push(key + '=' + encodeURIComponent(v));
   });
 
-  return `${scheme}://resolve?${params.join('&')}`;
+  return scheme + '://resolve?' + q2.join('&');
 }
 
+// ─── 生成中间确认页 HTML ─────────────────────────────────────────
 
-function buildHtmlPage(targetUrl, webUrl, scheme, appName, originalUrl) {
-  const safeTarget  = escapeHtml(targetUrl);
-  const safeWebUrl  = escapeHtml(webUrl);
-  const safeScheme  = escapeHtml(scheme);
-  const safeApp     = escapeHtml(appName);
-  const safeOrig    = escapeHtml(originalUrl);
-  const jsonTarget  = JSON.stringify(targetUrl);
-  const countdown   = new Date().getTime() + 3000;
+function buildHtmlPage(deepLink, appName) {
+  var safeLink = esc(deepLink);
+  var safeApp  = esc(appName);
+  var ts       = Date.now() + 3000;
 
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>正在跳转...</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: #f2f2f7;
-           display: flex; justify-content: center; align-items: center;
-           min-height: 100vh; }
-    main { background: #fff; border-radius: 16px; padding: 32px 24px;
-           max-width: 360px; width: 90%; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
-    h1   { font-size: 18px; color: #1c1c1e; margin-bottom: 8px; }
-    p    { font-size: 14px; color: #6c6c70; margin-bottom: 24px; }
-    .btn { display: inline-block; padding: 12px 24px; border-radius: 12px;
-           font-size: 15px; font-weight: 600; text-decoration: none;
-           margin: 6px; transition: opacity .2s; }
-    .btn:active { opacity: .7; }
-    .btn-primary  { background: #007aff; color: #fff; }
-    .btn-secondary{ background: #e5e5ea; color: #1c1c1e; }
-    footer { margin-top: 20px; font-size: 12px; color: #aeaeb2; }
-    #timer { font-weight: 700; color: #007aff; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>正在跳转到 Telegram</h1>
-    <p><span id="timer">3</span> 秒后自动在客户端内打开</p>
-    <section>
-      <div>
-        <a class="btn btn-primary"  href="${safeTarget}">在客户端内打开</a>
-        <a class="btn btn-secondary" href="${safeWebUrl}" data-orig="${safeOrig}">在浏览器中打开</a>
-      </div>
-    </section>
-    <footer>
-      <span>Powered by 李悦柠@liyuening</span>
-    </footer>
-  </main>
-  <script>
-    // 自动跳转
-    setTimeout(function(){ window.location.href = ${jsonTarget}; }, ${countdown} - Date.now());
-
-    // 倒计时显示
-    const el = document.getElementById('timer');
-    const iv = setInterval(function(){
-      const s = Math.ceil((${countdown} - Date.now()) / 1000);
-      if (s <= 0) { clearInterval(iv); return; }
-      el.textContent = s;
-    }, 200);
-  </script>
-</body>
-</html>`;
+  return '<!DOCTYPE html><html lang="zh-CN"><head>'
+    + '<meta charset="UTF-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>正在跳转…</title>'
+    + '<style>'
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + 'body{font-family:-apple-system,sans-serif;background:#f2f2f7;'
+    + 'display:flex;align-items:center;justify-content:center;min-height:100vh}'
+    + '.card{background:#fff;border-radius:18px;padding:36px 24px;'
+    + 'max-width:340px;width:92%;text-align:center;'
+    + 'box-shadow:0 4px 24px rgba(0,0,0,.09)}'
+    + 'h1{font-size:19px;color:#1c1c1e;margin-bottom:10px}'
+    + 'p{font-size:14px;color:#636366;margin-bottom:28px}'
+    + '#n{font-weight:700;color:#007aff}'
+    + '.btn{display:block;padding:13px;border-radius:12px;'
+    + 'font-size:15px;font-weight:600;text-decoration:none;margin-top:12px}'
+    + '.p{background:#007aff;color:#fff}'
+    + '.s{background:#e5e5ea;color:#1c1c1e}'
+    + '</style></head><body>'
+    + '<div class="card">'
+    + '<h1>即将在 ' + safeApp + ' 中打开</h1>'
+    + '<p><span id="n">3</span> 秒后自动跳转</p>'
+    + '<a class="btn p" href="' + safeLink + '">立即打开</a>'
+    + '<a class="btn s" id="cancel">取消自动跳转</a>'
+    + '</div>'
+    + '<script>'
+    + 'var t=' + ts + ',iv;'
+    + 'function tick(){'
+    + 'var s=Math.ceil((t-Date.now())/1000);'
+    + 'document.getElementById("n").textContent=s>0?s:0;'
+    + 'if(s<=0){clearInterval(iv);location.href=' + JSON.stringify(deepLink) + ';}}'
+    + 'iv=setInterval(tick,250);tick();'
+    + 'document.getElementById("cancel").onclick=function(){clearInterval(iv);};'
+    + '</script></body></html>';
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  主逻辑
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+(function() {
 
-function readBoxJs(key) {
-  try {
-    return $persistentStore.read(key) || null;
-  } catch {
-    return null;
-  }
-}
+  // 1. 读取配置（BoxJs $prefs 优先 → $argument → 默认值）
+  var args     = parseArgument($argument);
+  var appName  = readPref('tg_redirect_app')
+              || args['tme_redirect']
+              || args['tg_redirect']
+              || args['redirect']
+              || 'Telegram';
+  var openMode = readPref('tg_redirect_mode')
+              || args['open_mode']
+              || '307';
 
-
-(function () {
-  const args = parseArgument($argument);
-
-  const appName = String(
-    readBoxJs('tg_redirect_app')          
-    || args['tme_redirect']             
-    || args['tg_redirect']                
-    || args['redirect']                  
-    || 'Telegram'                         
-  );
-
-  const openMode = String(
-    readBoxJs('tg_redirect_mode')        
-    || args['open_mode']                   
-    || '307'                              
-  ).toLowerCase();
-
-
-  const schemeMap = {
-    'Telegram':   'tg',
-    'Swiftgram':  'sg',
-    'Turrit':     'turrit',
-    'iMe':        'iMe',
-    'Nicegram':   'ng',
-    'Lingogram':  'lg',
+  // 2. 应用名 → URL scheme
+  var schemeMap = {
+    'Telegram':  'tg',
+    'Swiftgram': 'sg',
+    'Nicegram':  'nicegram',
+    'iMe':       'iMe',
+    'Turrit':    'turrit',
+    'Lingogram': 'lingogram'
   };
+  var scheme = schemeMap[appName] || appName;
+  scheme = scheme.split('://')[0]; // 容错带 :// 的写法
+  if (!scheme) { $done({}); return; }
 
-  let scheme = schemeMap[appName] || String(appName || '');
+  // 3. 解析请求 URL
+  var reqUrl = ($request && $request.url) ? $request.url : '';
+  var u;
+  try { u = new URL(reqUrl); } catch(e) { $done({}); return; }
 
-  if (!scheme) return $done({});
-
-
-  if (scheme.indexOf('://') >= 0) {
-    scheme = scheme.split('://')[0];
+  // 4. 防循环：已处理过的请求（带 tgWebAppPlatform 参数）直接放行
+  if (u.searchParams.get('tgWebAppPlatform') !== null) {
+    $done({});
+    return;
   }
 
-  const reqUrl = $request && $request.url ? $request.url : '';
-  let parsedUrl;
-  try {
-    parsedUrl = new URL(reqUrl);
-  } catch {
-    return $done({});
+  // 5. 只处理 t.me / telegram.me
+  var host = (u.hostname || '').toLowerCase();
+  if (host !== 't.me' && host !== 'telegram.me') {
+    $done({});
+    return;
   }
 
+  // 6. 构建深链
+  var deepLink = buildDeepLink(scheme, u);
+  if (!deepLink) { $done({}); return; }
 
-  if (parsedUrl.searchParams && parsedUrl.searchParams.get('tgWebAppPlatform') === '0') {
-    return $done({});
-  }
-
-
-  const host = String(parsedUrl.hostname || '').toLowerCase();
-  if (host !== 't.me' && host !== 'telegram.me') return $done({});
-
-
-  const targetUrl = buildTargetUrl(scheme, parsedUrl);
-  if (!targetUrl) return $done({});
-
-
+  // 7. 返回响应
+  //    script-echo-response 下 $done 的格式：
+  //    { status, headers, body }
   if (openMode === '200') {
-
-    const webUrl  = appendPlatformParam(parsedUrl.toString());
-    const htmlBody = buildHtmlPage(targetUrl, webUrl, scheme, appName, reqUrl);
-    return $done({
-      response: {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
-        },
-        body: htmlBody,
+    $done({
+      status: 'HTTP/1.1 200 OK',
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache'
       },
+      body: buildHtmlPage(deepLink, appName)
+    });
+  } else {
+    // 301 让浏览器/WebView 跳转到 custom scheme
+    $done({
+      status: 'HTTP/1.1 301 Moved Permanently',
+      headers: {
+        'Location': deepLink,
+        'Cache-Control': 'no-store, no-cache',
+        'Content-Type': 'text/plain'
+      },
+      body: ''
     });
   }
 
-
-  return $done({
-    response: {
-      status: 307,
-      headers: {
-        'Location': targetUrl,
-        'Cache-Control': 'no-store',
-      },
-      body: '',
-    },
-  });
 })();
