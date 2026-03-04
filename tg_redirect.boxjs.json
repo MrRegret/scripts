@@ -1,34 +1,51 @@
 {
-  "id": "tg-redirect",
+  "id": "tg-redirect.sub",
   "name": "TG链接重定向",
-  "desc": "将 t.me 链接重定向到指定的 Telegram 客户端",
-  "author": "",
-  "repo": "",
-  "settings": [
+  "author": " ",
+  "icon": "https://telegram.org/img/t_logo.png",
+  "repo": "https://github.com/liyuening",
+  "apps": [
     {
-      "id": "tg_redirect_app",
-      "name": "目标客户端",
-      "val": "Telegram",
-      "type": "select",
-      "desc": "选择点击 t.me 链接时要打开的客户端",
-      "items": [
-        "Telegram",
-        "Swiftgram",
-        "Nicegram",
-        "iMe",
-        "Turrit",
-        "Lingogram"
-      ]
-    },
-    {
-      "id": "tg_redirect_mode",
-      "name": "跳转方式",
-      "val": "307",
-      "type": "select",
-      "desc": "307=静默直跳(推荐)  200=显示中间确认页",
-      "items": [
-        "307",
-        "200"
+      "id": "tg-redirect",
+      "name": "TG链接重定向",
+      "author": "@liyuening",
+      "desc": "将 t.me 链接重定向到指定的 Telegram 客户端",
+      "repo": "",
+      "keys": [
+        "tg_redirect_app",
+        "tg_redirect_mode"
+      ],
+      "settings": [
+        {
+          "id": "tg_redirect_app",
+          "name": "目标客户端",
+          "val": "Telegram",
+          "type": "select",
+          "desc": "选择点击 t.me 链接时要打开的客户端",
+          "items": [
+            "Telegram",
+            "Swiftgram",
+            "Nicegram",
+            "iMe",
+            "Turrit",
+            "Lingogram"
+          ]
+        },
+        {
+          "id": "tg_redirect_mode",
+          "name": "跳转方式",
+          "val": "307",
+          "type": "select",
+          "desc": "307=静默直跳（推荐）  200=显示中间确认页",
+          "items": [
+            "307",
+            "200"
+          ]
+        }
+      ],
+      "icons": [
+        "https://telegram.org/img/t_logo.png",
+        "https://telegram.org/img/t_logo.png"
       ]
     }
   ]
