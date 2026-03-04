@@ -23,7 +23,6 @@ function parseArgument(arg) {
   return result;
 }
 
-// ─── 判断字符串是否全为数字 ────────────────────────────────────────
 function isAllDigits(str) {
   if (!str) return false;
   for (let i = 0; i < str.length; i++) {
@@ -33,7 +32,6 @@ function isAllDigits(str) {
   return true;
 }
 
-// ─── HTML 实体转义（用于 open_mode=307 时生成页面） ────────────────
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -43,7 +41,6 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// ─── 给 URL 追加 tgWebAppPlatform=ios 参数 ────────────────────────
 function appendPlatformParam(href) {
   try {
     const u = new URL(href);
@@ -54,33 +51,30 @@ function appendPlatformParam(href) {
   }
 }
 
-// ─── 根据路径片段构建目标协议 URL ──────────────────────────────────
-// scheme: 'tg' | 'sg' | 'turrit' | 'iMe' | 'ng' | 'lg' 等
+
 function buildTargetUrl(scheme, parsedUrl) {
   const rawPath = String(parsedUrl.pathname || '/');
   const segments = rawPath.split('/').filter(Boolean);
 
   if (!segments.length) return null;
 
-  // /s/username → 频道预览
+
   if (segments[0] === 's' && segments.length > 1) {
     segments.shift();
   }
 
   const first = segments[0];
 
-  // ── /username/postId  (频道文章)
   if (first && isAllDigits(first.slice(1)) && first[0] === '+' && first.length > 1) {
-    // 邀请链接: /+hash
+
     return `${scheme}://join?invite=${encodeURIComponent(first.slice(1))}`;
   }
 
-  // ── /addstickers/pack
   if (first === 'addstickers' && segments[1]) {
     return `${scheme}://addstickers?set=${encodeURIComponent(segments[1])}`;
   }
 
-  // ── /share/url?url=...&text=...
+
   if (first === 'share' && segments[1] === 'url') {
     const parts = [];
     const urlParam = parsedUrl.searchParams.get('url');
@@ -90,7 +84,7 @@ function buildTargetUrl(scheme, parsedUrl) {
     return `${scheme}://msg_url?${parts.join('&')}`;
   }
 
-  // ── /c/channelId/messageId  (私有频道消息)
+
   if (
     first === 'c' &&
     segments[1] && isAllDigits(segments[1]) &&
@@ -99,7 +93,7 @@ function buildTargetUrl(scheme, parsedUrl) {
     return `${scheme}://privatepost?channel=${segments[1]}&post=${segments[2]}`;
   }
 
-  // ── /username  或  /username/messageId  (普通用户/频道)
+
   const username = first;
   if (!username) return null;
 
@@ -108,7 +102,7 @@ function buildTargetUrl(scheme, parsedUrl) {
     params.push(`post=${segments[1]}`);
   }
 
-  // 把原始 search params 也透传
+
   parsedUrl.searchParams.forEach((v, k) => {
     params.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
   });
@@ -116,7 +110,7 @@ function buildTargetUrl(scheme, parsedUrl) {
   return `${scheme}://resolve?${params.join('&')}`;
 }
 
-// ─── 生成"中间跳转"HTML 页面（open_mode=307） ─────────────────────
+
 function buildHtmlPage(targetUrl, webUrl, scheme, appName, originalUrl) {
   const safeTarget  = escapeHtml(targetUrl);
   const safeWebUrl  = escapeHtml(webUrl);
@@ -181,9 +175,7 @@ function buildHtmlPage(targetUrl, webUrl, scheme, appName, originalUrl) {
 </html>`;
 }
 
-// ─── 读取 BoxJs 持久化存储的配置 ──────────────────────────────────
-// BoxJs 将用户选择存入 $persistentStore，key 为 setting id
-// 若未安装 BoxJs 则 $persistentStore.read() 返回 null，自动降级到 $argument
+
 function readBoxJs(key) {
   try {
     return $persistentStore.read(key) || null;
@@ -192,28 +184,25 @@ function readBoxJs(key) {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  主逻辑
-// ══════════════════════════════════════════════════════════════════
+
 (function () {
-  // 1. 优先读取 BoxJs 配置，没有再读 $argument，最后用默认值
   const args = parseArgument($argument);
 
   const appName = String(
-    readBoxJs('tg_redirect_app')           // BoxJs 选择的客户端
-    || args['tme_redirect']                // argument 兼容写法1
-    || args['tg_redirect']                 // argument 兼容写法2
-    || args['redirect']                    // argument 兼容写法3
-    || 'Telegram'                          // 默认值
+    readBoxJs('tg_redirect_app')          
+    || args['tme_redirect']             
+    || args['tg_redirect']                
+    || args['redirect']                  
+    || 'Telegram'                         
   );
 
   const openMode = String(
-    readBoxJs('tg_redirect_mode')          // BoxJs 选择的跳转方式
-    || args['open_mode']                   // argument 指定
-    || '307'                               // 默认直跳
+    readBoxJs('tg_redirect_mode')        
+    || args['open_mode']                   
+    || '307'                              
   ).toLowerCase();
 
-  // 2. 应用名 → 协议 scheme 映射
+
   const schemeMap = {
     'Telegram':   'tg',
     'Swiftgram':  'sg',
@@ -227,12 +216,11 @@ function readBoxJs(key) {
 
   if (!scheme) return $done({});
 
-  // 去掉协议前缀（如果传入的是 tg://）
+
   if (scheme.indexOf('://') >= 0) {
     scheme = scheme.split('://')[0];
   }
 
-  // 3. 解析当前请求 URL
   const reqUrl = $request && $request.url ? $request.url : '';
   let parsedUrl;
   try {
@@ -241,22 +229,22 @@ function readBoxJs(key) {
     return $done({});
   }
 
-  // 4. 过滤：tgWebAppPlatform=0 的请求直接放行（避免循环）
+
   if (parsedUrl.searchParams && parsedUrl.searchParams.get('tgWebAppPlatform') === '0') {
     return $done({});
   }
 
-  // 5. 只处理 t.me / telegram.me
+
   const host = String(parsedUrl.hostname || '').toLowerCase();
   if (host !== 't.me' && host !== 'telegram.me') return $done({});
 
-  // 6. 构建目标协议 URL
+
   const targetUrl = buildTargetUrl(scheme, parsedUrl);
   if (!targetUrl) return $done({});
 
-  // 7. 根据 open_mode 决定响应方式
+
   if (openMode === '200') {
-    // 返回 HTML 中间页
+
     const webUrl  = appendPlatformParam(parsedUrl.toString());
     const htmlBody = buildHtmlPage(targetUrl, webUrl, scheme, appName, reqUrl);
     return $done({
@@ -271,7 +259,7 @@ function readBoxJs(key) {
     });
   }
 
-  // 默认：307 重定向
+
   return $done({
     response: {
       status: 307,
