@@ -1,0 +1,35 @@
+{
+  "id": "tg-redirect",
+  "name": "TG链接重定向",
+  "desc": "将 t.me 链接重定向到指定的 Telegram 客户端",
+  "author": "李悦柠",
+  "repo": "",
+  "settings": [
+    {
+      "id": "tg_redirect_app",
+      "name": "目标客户端",
+      "val": "Telegram",
+      "type": "select",
+      "desc": "选择点击 t.me 链接时要打开的客户端",
+      "items": [
+        "Telegram",
+        "Swiftgram",
+        "Nicegram",
+        "iMe",
+        "Turrit",
+        "Lingogram"
+      ]
+    },
+    {
+      "id": "tg_redirect_mode",
+      "name": "跳转方式",
+      "val": "307",
+      "type": "select",
+      "desc": "307=静默直跳(推荐)  200=显示中间确认页",
+      "items": [
+        "307",
+        "200"
+      ]
+    }
+  ]
+}
