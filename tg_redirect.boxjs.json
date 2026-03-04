@@ -3,12 +3,12 @@
   "name": "TG链接重定向",
   "author": " ",
   "icon": "https://telegram.org/img/t_logo.png",
-  "repo": "https://github.com/liyuening",
+  "repo": " ",
   "apps": [
     {
       "id": "tg-redirect",
       "name": "TG链接重定向",
-      "author": "@liyuening",
+      "author": " ",
       "desc": "将 t.me 链接重定向到指定的 Telegram 客户端",
       "repo": "",
       "keys": [
