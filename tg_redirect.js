@@ -1,23 +1,17 @@
-/*
+/******************************
+/******************************
   TG链接重定向 - QuantumultX 脚本
-
-  ─────────────────────────────────────────────────────────────────
   功能：拦截 t.me / telegram.me 链接，跳转到指定 TG 客户端
-
-  ══ 方式一：直接在 argument 写死（无需任何额外工具）══════════════
-
-  [rewrite_local]
-  # 跳转到 Telegram（默认），静默直跳
-  ^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js, tag=TG重定向
-
-
-  [MITM]
-  hostname = t.me, telegram.me
-
   可选客户端：Telegram | Swiftgram | Nicegram | iMe | Turrit | Lingogram
   open_mode：307=静默直跳(推荐)  200=显示中间确认页
-  ─────────────────────────────────────────────────────────────────
-*/
+*************************
+[rewrite_local]
+^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js, tag=TG重定向
+[MITM]
+hostname = t.me, telegram.me
+*************************
+
+*****************************************/
 
 // ─── 解析 $argument 参数 ───────────────────────────────────────────
 function parseArgument(arg) {
