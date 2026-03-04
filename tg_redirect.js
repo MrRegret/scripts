@@ -1,19 +1,19 @@
 /******************************
 /******************************
-  TG链接重定向 - QuantumultX 脚本
-  功能：拦截 t.me / telegram.me 链接，跳转到指定 TG 客户端
-  可选客户端：Telegram | Swiftgram | Nicegram | iMe | Turrit | Lingogram
-  open_mode：307=静默直跳(推荐)  200=显示中间确认页
+TG链接重定向 - QuantumultX 脚本
+功能：拦截 t.me / telegram.me 链接，跳转到指定 TG 客户端
+可选客户端：Telegram | Swiftgram | Nicegram | iMe | Turrit | Lingogram
+open_mode：307=静默直跳(推荐)  200=显示中间确认页。
 *************************
-[rewrite_local]
-^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js, tag=TG重定向
-[MITM]
+
+[mitm]
 hostname = t.me, telegram.me
+[rewrite_local]
+^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js
+
 *************************
 
 *****************************************/
-
-// ─── 解析 $argument 参数 ───────────────────────────────────────────
 function parseArgument(arg) {
   if (typeof arg === 'object' && arg) return arg;
   const result = {};
