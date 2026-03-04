@@ -43,13 +43,12 @@ if (!target) {
   $done({})
 }
 
-// QX rewrite 返回
 if (mode === "307") {
   $done({
     redirect: target
   })
 } else {
-  // 200 中间页
+
   const html = buildHTML(target, app)
   $done({
     body: html,
