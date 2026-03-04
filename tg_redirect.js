@@ -8,23 +8,14 @@
 
   [rewrite_local]
   # 跳转到 Telegram（默认），静默直跳
-  ^https?://(t\.me|telegram\.me)/ url script-request-header tg_redirect.js, tag=TG重定向, argument=tme_redirect=Telegram&open_mode=307
+  ^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.boxjs.json, tag=TG重定向
 
-  # 跳转到 Swiftgram，显示中间确认页
-  ^https?://(t\.me|telegram\.me)/ url script-request-header tg_redirect.js, tag=TG重定向, argument=tme_redirect=Swiftgram&open_mode=200
 
   [MITM]
   hostname = t.me, telegram.me
 
   可选客户端：Telegram | Swiftgram | Nicegram | iMe | Turrit | Lingogram
   open_mode：307=静默直跳(推荐)  200=显示中间确认页
-
-  ══ 方式二：BoxJs 图形化配置（需先安装 BoxJs）══════════════════
-  1. 安装 BoxJs：https://github.com/chavyleung/scripts/tree/master/box/rewrite
-  2. 将 tg_redirect.boxjs.json 的内容添加为 BoxJs 订阅源
-  3. 在 BoxJs Web UI 中选择客户端和跳转方式
-  4. rewrite 规则无需 argument（BoxJs 自动读取持久化存储）：
-     ^https?://(t\.me|telegram\.me)/ url script-request-header tg_redirect.js, tag=TG重定向
   ─────────────────────────────────────────────────────────────────
 */
 
