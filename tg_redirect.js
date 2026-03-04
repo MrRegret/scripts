@@ -7,6 +7,7 @@ hostname = t.me, telegram.me
 ^https?:\/\/(t|telegram)\.me\/.* url script-response-body https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js
 *************************
 *****************************************/
+
 const app = $prefs.valueForKey("tg_redirect_app") || "Telegram"
 const mode = $prefs.valueForKey("tg_redirect_mode") || "307"
 
@@ -28,7 +29,6 @@ if (!$request || !$request.url) {
 const url = new URL($request.url)
 const host = url.hostname.toLowerCase()
 
-// 仅处理 t.me / telegram.me
 if (host !== "t.me" && host !== "telegram.me") {
   $done({})
 }
@@ -39,114 +39,54 @@ if (pathParts.length === 0) {
 }
 
 let target = buildTarget(scheme, pathParts, url)
-
 if (!target) {
   $done({})
 }
 
-// 307 直跳
+// QX rewrite 返回
 if (mode === "307") {
   $done({
-    response: {
-      status: 307,
-      headers: {
-        "Location": target,
-        "Cache-Control": "no-store"
-      }
-    }
+    redirect: target
   })
-}
-
-// 200 中间页
-else {
+} else {
+  // 200 中间页
   const html = buildHTML(target, app)
   $done({
-    response: {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store"
-      },
-      body: html
+    body: html,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8"
     }
   })
 }
 
-
-
 function buildTarget(scheme, parts, url) {
-
-  // t.me/s/xxx → 去掉 s
-  if (parts[0] === "s" && parts[1]) {
-    parts.shift()
-  }
-
-  // addstickers
-  if (parts[0] === "addstickers" && parts[1]) {
+  if (parts[0] === "s" && parts[1]) parts.shift()
+  if (parts[0] === "addstickers" && parts[1])
     return `${scheme}://addstickers?set=${encodeURIComponent(parts[1])}`
-  }
-
-  // share/url
   if (parts[0] === "share" && parts[1] === "url") {
     const shareUrl = url.searchParams.get("url") || ""
     const text = url.searchParams.get("text") || ""
-    return `${scheme}://msg_url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`
+    return `${scheme}://msg_url?url=${encodeURIComponent(
+      shareUrl
+    )}&text=${encodeURIComponent(text)}`
   }
-
-  // 私有频道 t.me/c/xxx/xxx
-  if (parts[0] === "c" && parts[1] && parts[2]) {
+  if (parts[0] === "c" && parts[1] && parts[2])
     return `${scheme}://privatepost?channel=${parts[1]}&post=${parts[2]}`
-  }
-
-  // 普通用户名/频道
   const domain = parts[0]
   if (!domain) return null
-
   let result = `${scheme}://resolve?domain=${encodeURIComponent(domain)}`
-
-  if (parts[1] && /^\d+$/.test(parts[1])) {
-    result += `&post=${parts[1]}`
-  }
-
+  if (parts[1] && /^\d+$/.test(parts[1])) result += `&post=${parts[1]}`
   return result
 }
-
-
 
 function buildHTML(target, app) {
   return `
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="utf-8">
-<title>正在打开 ${app}</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{
-  font-family:-apple-system;
-  text-align:center;
-  padding:60px 20px;
-}
-button{
-  padding:12px 20px;
-  font-size:16px;
-  border-radius:8px;
-  border:none;
-  background:#0088cc;
-  color:#fff;
-}
-</style>
-</head>
+<head><meta charset="utf-8"><title>正在打开 ${app}</title></head>
 <body>
-<h2>正在打开 ${app}</h2>
-<p>如果未自动跳转，请点击下方按钮</p>
-<button onclick="location.href='${target}'">打开客户端</button>
-<script>
-setTimeout(function(){
-  location.href="${target}"
-},800)
-</script>
+<p>正在打开 ${app}，如果未跳转请点击<a href="${target}">这里</a></p>
+<script>setTimeout(()=>location.href="${target}",800)</script>
 </body>
-</html>
-`
+</html>`
 }
