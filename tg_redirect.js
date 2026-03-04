@@ -1,12 +1,4 @@
-/******************************
-/******************************
-*************************
-[mitm]
-hostname = t.me, telegram.me
-[rewrite_local]
-^https?://(t\.me|telegram\.me)/ url script-request-header https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js
-*************************
-*****************************************/
+
 function parseArgument(arg) {
   if (typeof arg === 'object' && arg) return arg;
   const result = {};
