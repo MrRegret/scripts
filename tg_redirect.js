@@ -9,48 +9,64 @@
 [mitm]
 hostname = t.me, telegram.me
  */
-const app = $prefs.valueForKey("tg_redirect_app") || "Nicegram"; // 目标客户端
-const mode = $prefs.valueForKey("tg_redirect_mode") || "307";  // 跳转方式
+/*
+ TG 链接重定向 - QuanX 可用
+ @supported Quantumult X
+ @run-at request
+ @author 你
+*/
 
-// 解析请求 URL
+let apps = {
+  "Telegram": "tg://resolve?domain=",
+  "Swiftgram": "swiftgram://resolve?domain=",
+  "Nicegram": "nicegram://resolve?domain=",
+  "iMe": "ime://resolve?domain=",
+  "Turrit": "turrit://resolve?domain=",
+  "Lingogram": "lingo://resolve?domain="
+};
+
+// 获取 BoxJS 配置的目标客户端
+let targetApp = $prefs.valueForKey("tg_redirect_app") || "Telegram";
+
 let url = $request.url;
-if (!url.startsWith("https://t.me/")) {
-    $done({}); // 非 t.me 链接直接放行
-}
 
-// 构造客户端跳转 URL
-let redirectUrl;
-switch (app) {
-    case "Nicegram":
-        redirectUrl = url.replace("https://t.me/", "nicegram://user?url=");
-        break;
-    case "Telegram":
-        redirectUrl = url.replace("https://t.me/", "tg://resolve?domain=");
-        break;
-    case "Swiftgram":
-        redirectUrl = url.replace("https://t.me/", "swiftgram://resolve?domain=");
-        break;
-    case "iMe":
-        redirectUrl = url.replace("https://t.me/", "ime://resolve?domain=");
-        break;
-    case "Turrit":
-        redirectUrl = url.replace("https://t.me/", "turrit://resolve?domain=");
-        break;
-    case "Lingogram":
-        redirectUrl = url.replace("https://t.me/", "lingogram://resolve?domain=");
-        break;
-    default:
-        redirectUrl = url;
-}
+if (!url.includes("t.me")) {
+  $done({});
+} else {
+  // 提取 t.me 的路径部分
+  let pathMatch = url.match(/t\.me\/(.+)/);
+  if (!pathMatch) {
+    $done({});
+  } else {
+    let path = pathMatch[1];
 
-// 直接返回 307 或 302 重定向
-$done({
-    response: {
-        status: parseInt(mode),
-        headers: {
-            "Location": redirectUrl,
-            "Cache-Control": "no-store"
-        },
-        body: ""
-    }
-});
+    // 生成中间页 HTML
+    let deepLink = apps[targetApp] + path;
+    let html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>正在跳转 ${targetApp}</title>
+<meta http-equiv="refresh" content="0; url=${deepLink}">
+<style>
+body { display:flex; justify-content:center; align-items:center; height:100vh; font-family:Arial; }
+p { font-size:18px; }
+</style>
+</head>
+<body>
+<p>正在打开 ${targetApp} …</p>
+<script>
+window.location.href='${deepLink}';
+</script>
+</body>
+</html>`;
+
+    $done({
+      response: {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+        body: html
+      }
+    });
+  }
+}
