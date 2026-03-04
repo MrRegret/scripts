@@ -10,84 +10,44 @@
 hostname = t.me, telegram.me
  */
 
-const app = $prefs.valueForKey("tg_redirect_app") || "Telegram"
-const mode = $prefs.valueForKey("tg_redirect_mode") || "307"
 
-const appMap = {
-  "Telegram": "tg",
-  "Swiftgram": "sg",
-  "Nicegram": "ng",
-  "iMe": "ime",
-  "Turrit": "tt",
-  "Lingogram": "lg"
-}
-
-const scheme = appMap[app] || "tg"
-
-if (!$request || !$request.url) {
-  $done({})
-}
-
-const url = new URL($request.url)
-const host = url.hostname.toLowerCase()
-
-if (host !== "t.me" && host !== "telegram.me") {
-  $done({})
-}
-
-const pathParts = url.pathname.split("/").filter(Boolean)
-if (pathParts.length === 0) {
-  $done({})
-}
-
-let target = buildTarget(scheme, pathParts, url)
-if (!target) {
-  $done({})
-}
-
-if (mode === "307") {
-  $done({
-    redirect: target
-  })
-} else {
-
-  const html = buildHTML(target, app)
-  $done({
-    body: html,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8"
+(function() {
+    const path = $request.url.match(/^https?:\/\/t\.me\/(.+)$/);
+    if (!path) {
+        $done({ status: 404, body: "Invalid t.me link" });
+        return;
     }
-  })
-}
 
-function buildTarget(scheme, parts, url) {
-  if (parts[0] === "s" && parts[1]) parts.shift()
-  if (parts[0] === "addstickers" && parts[1])
-    return `${scheme}://addstickers?set=${encodeURIComponent(parts[1])}`
-  if (parts[0] === "share" && parts[1] === "url") {
-    const shareUrl = url.searchParams.get("url") || ""
-    const text = url.searchParams.get("text") || ""
-    return `${scheme}://msg_url?url=${encodeURIComponent(
-      shareUrl
-    )}&text=${encodeURIComponent(text)}`
-  }
-  if (parts[0] === "c" && parts[1] && parts[2])
-    return `${scheme}://privatepost?channel=${parts[1]}&post=${parts[2]}`
-  const domain = parts[0]
-  if (!domain) return null
-  let result = `${scheme}://resolve?domain=${encodeURIComponent(domain)}`
-  if (parts[1] && /^\d+$/.test(parts[1])) result += `&post=${parts[1]}`
-  return result
-}
+    // BoxJS 配置 Key
+    const appKey = "tg_redirect_app";
+    let client = $prefs.valueForKey(appKey) || "Nicegram";
 
-function buildHTML(target, app) {
-  return `
+    // Scheme 对应表
+    const schemeMap = {
+        "Telegram": "tg://resolve?domain=",
+        "Swiftgram": "swiftgram://resolve?domain=",
+        "Nicegram": "nicegram://resolve?domain=",
+        "iMe": "ime://resolve?domain=",
+        "Turrit": "turrit://resolve?domain=",
+        "Lingogram": "lingogram://resolve?domain="
+    };
+
+    const redirectURL = (schemeMap[client] || schemeMap["Nicegram"]) + path[1];
+
+    // 返回极简 HTML 自动跳转
+    const body = `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>正在打开 ${app}</title></head>
-<body>
-<p>正在打开 ${app}，如果未跳转请点击<a href="${target}">这里</a></p>
-<script>setTimeout(()=>location.href="${target}",800)</script>
-</body>
-</html>`
-}
+<head><meta charset="utf-8"><title>Redirecting…</title>
+<script>window.location.href="${redirectURL}";</script>
+</head>
+<body>Redirecting to ${client}...</body>
+</html>
+`;
+
+    $done({
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+        body: body
+    });
+})();
