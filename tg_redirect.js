@@ -9,45 +9,48 @@
 [mitm]
 hostname = t.me, telegram.me
  */
+const app = $prefs.valueForKey("tg_redirect_app") || "Nicegram"; // 目标客户端
+const mode = $prefs.valueForKey("tg_redirect_mode") || "307";  // 跳转方式
 
+// 解析请求 URL
+let url = $request.url;
+if (!url.startsWith("https://t.me/")) {
+    $done({}); // 非 t.me 链接直接放行
+}
 
-(function() {
-    const path = $request.url.match(/^https?:\/\/t\.me\/(.+)$/);
-    if (!path) {
-        $done({ status: 404, body: "Invalid t.me link" });
-        return;
+// 构造客户端跳转 URL
+let redirectUrl;
+switch (app) {
+    case "Nicegram":
+        redirectUrl = url.replace("https://t.me/", "nicegram://user?url=");
+        break;
+    case "Telegram":
+        redirectUrl = url.replace("https://t.me/", "tg://resolve?domain=");
+        break;
+    case "Swiftgram":
+        redirectUrl = url.replace("https://t.me/", "swiftgram://resolve?domain=");
+        break;
+    case "iMe":
+        redirectUrl = url.replace("https://t.me/", "ime://resolve?domain=");
+        break;
+    case "Turrit":
+        redirectUrl = url.replace("https://t.me/", "turrit://resolve?domain=");
+        break;
+    case "Lingogram":
+        redirectUrl = url.replace("https://t.me/", "lingogram://resolve?domain=");
+        break;
+    default:
+        redirectUrl = url;
+}
+
+// 直接返回 307 或 302 重定向
+$done({
+    response: {
+        status: parseInt(mode),
+        headers: {
+            "Location": redirectUrl,
+            "Cache-Control": "no-store"
+        },
+        body: ""
     }
-
-    // BoxJS 配置 Key
-    const appKey = "tg_redirect_app";
-    let client = $prefs.valueForKey(appKey) || "Nicegram";
-
-    // Scheme 对应表
-    const schemeMap = {
-        "Telegram": "tg://resolve?domain=",
-        "Swiftgram": "swiftgram://resolve?domain=",
-        "Nicegram": "nicegram://resolve?domain=",
-        "iMe": "ime://resolve?domain=",
-        "Turrit": "turrit://resolve?domain=",
-        "Lingogram": "lingogram://resolve?domain="
-    };
-
-    const redirectURL = (schemeMap[client] || schemeMap["Nicegram"]) + path[1];
-
-    // 返回极简 HTML 自动跳转
-    const body = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Redirecting…</title>
-<script>window.location.href="${redirectURL}";</script>
-</head>
-<body>Redirecting to ${client}...</body>
-</html>
-`;
-
-    $done({
-        status: 200,
-        headers: { "Content-Type": "text/html" },
-        body: body
-    });
-})();
+});
