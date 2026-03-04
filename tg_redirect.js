@@ -1,12 +1,14 @@
-/******************************
-/******************************
-*************************
-[mitm]
-hostname = t.me, telegram.me
+/**
+ * by：
+ * 作用：
+ * 先登录
+
 [rewrite_local]
 ^https?:\/\/(t|telegram)\.me\/.* url script-response-body https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect.js
-*************************
-*****************************************/
+
+[mitm]
+hostname = t.me, telegram.me
+ */
 
 const app = $prefs.valueForKey("tg_redirect_app") || "Telegram"
 const mode = $prefs.valueForKey("tg_redirect_mode") || "307"
