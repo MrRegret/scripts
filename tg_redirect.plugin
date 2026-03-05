@@ -1,0 +1,20 @@
+#!name=TG链接重定向
+#!desc=将 t.me / telegram.me 链接重定向到指定 Telegram 客户端
+#!author= 
+#!icon=https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/Telegram.png
+#!homepage=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect_loon.js
+
+[Argument]
+# 建议直接用小写，和脚本内部映射一致
+tme_redirect = select,"telegram","swiftgram","turrit","ime","nicegram","lingogram",tag=目标客户端
+
+# 307 = HTML中转页唤起（推荐，稳定）
+# 302 = 直接重定向
+open_mode = select,"307","302",tag=跳转方式
+
+[Script]
+# 把 script-path 换成你部署的“新脚本地址”
+http-request ^https?:\/\/(t\.me|telegram\.me)\/.+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/tg_redirect_loon.js,tag=TG链接重定向,enable=true,requires-body=false,timeout=10,argument=tme_redirect={tme_redirect}&open_mode={open_mode}
+
+[MITM]
+hostname = t.me,telegram.me
