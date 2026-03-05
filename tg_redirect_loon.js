@@ -1,27 +1,50 @@
 /*
-  TG链接重定向脚本 - Loon 专用修复版
+  TG链接重定向脚本 - 兼容数组参数格式
   修复内容:
-  - Nicegram: ng -> nicegram
-  - Lingogram: lg -> lingogram
-  - 增强参数验证和防重定向循环保护
-  - 优化 Loon Argument 参数解析
+  - 支持 Loon 的数组参数格式: ["Nicegram", "html"]
+  - 修复 Nicegram: ng -> nicegram
+  - 修复 Lingogram: lg -> lingogram
+  - 兼容多种参数传递格式
 */
 
 (function() {
   try {
-    // 解析参数
-    const params = parseArgument($argument);
-    console.log('[TG Redirect] 解析的参数:', JSON.stringify(params));
+    console.log('[TG Redirect] ========== 脚本开始执行 ==========');
+    console.log('[TG Redirect] 原始参数:', JSON.stringify($argument));
+    console.log('[TG Redirect] 参数类型:', typeof $argument);
     
-    // 获取重定向目标客户端 (转为小写以支持多种写法)
-    let redirectTarget = (params['tme_redirect'] || params['redirect'] || params['client'] || 'telegram').toLowerCase();
-    console.log('[TG Redirect] 目标客户端:', redirectTarget);
+    let redirectTarget = 'Nicegram';  // 默认使用 Nicegram
+    let openMode = 'html';            // 默认使用 html 模式
     
-    // 获取打开模式
-    const openMode = String(params['open_mode'] || '307').toLowerCase();
-    console.log('[TG Redirect] 打开模式:', openMode);
+    // 解析参数 - 支持多种格式
+    if (Array.isArray($argument)) {
+      // 格式1: 数组格式 ["Nicegram", "html"]
+      console.log('[TG Redirect] 参数格式: 数组');
+      redirectTarget = $argument[0] || 'Nicegram';
+      openMode = $argument[1] || 'html';
+    } else if (typeof $argument === 'object' && $argument !== null) {
+      // 格式2: 对象格式 {tme_redirect: "Nicegram", open_mode: "html"}
+      console.log('[TG Redirect] 参数格式: 对象');
+      redirectTarget = $argument['tme_redirect'] || $argument['redirect'] || $argument['client'] || 'Nicegram';
+      openMode = $argument['open_mode'] || 'html';
+    } else if (typeof $argument === 'string') {
+      // 格式3: 字符串格式 "tme_redirect=Nicegram&open_mode=html"
+      console.log('[TG Redirect] 参数格式: 字符串');
+      const params = parseQueryString($argument);
+      redirectTarget = params['tme_redirect'] || params['redirect'] || params['client'] || 'Nicegram';
+      openMode = params['open_mode'] || 'html';
+    }
     
-    // 客户端URL Scheme映射 (使用小写键名以兼容各种输入)
+    // 转换为小写以兼容各种写法
+    const targetClient = String(redirectTarget || 'Nicegram');
+    const targetLower = targetClient.toLowerCase();
+    const mode = String(openMode || 'html').toLowerCase();
+    
+    console.log('[TG Redirect] 目标客户端:', targetClient);
+    console.log('[TG Redirect] 目标客户端(小写):', targetLower);
+    console.log('[TG Redirect] 打开模式:', mode);
+    
+    // 客户端URL Scheme映射
     const CLIENT_SCHEMES = {
       'telegram': 'tg',
       'swiftgram': 'sg',
@@ -32,11 +55,11 @@
     };
     
     // 获取对应的URL Scheme
-    let scheme = CLIENT_SCHEMES[redirectTarget];
+    let scheme = CLIENT_SCHEMES[targetLower];
     
-    // 如果找不到映射,尝试直接使用用户输入的值
     if (!scheme) {
-      scheme = redirectTarget;
+      console.log('[TG Redirect] ⚠️ 未找到映射，尝试直接使用:', targetLower);
+      scheme = targetLower;
     }
     
     console.log('[TG Redirect] 使用的 URL Scheme:', scheme);
@@ -70,9 +93,9 @@
       return $done({});
     }
     
-    // 防止重定向循环:检查是否已经处理过
+    // 防止重定向循环
     if (urlObj.searchParams && urlObj.searchParams.get('tg') === '0') {
-      console.log('[TG Redirect] ⚠️ 检测到重定向循环标记,跳过处理');
+      console.log('[TG Redirect] ⚠️ 检测到重定向循环标记，跳过处理');
       return $done({});
     }
     
@@ -94,10 +117,10 @@
     console.log('[TG Redirect] ✅ 重定向 URL:', redirectUrl);
     
     // 根据打开模式返回不同响应
-    if (openMode === '302' || openMode === 'd9') {
+    if (mode === 'html' || mode === 'd9' || mode === '302') {
       // HTML中转页模式
       const cleanUrl = markUrlAsProcessed(urlObj.toString());
-      const htmlPage = generateHtmlPage(redirectUrl, cleanUrl, scheme, redirectTarget, requestUrl);
+      const htmlPage = generateHtmlPage(redirectUrl, cleanUrl, scheme, targetClient, requestUrl);
       
       console.log('[TG Redirect] 📄 使用 HTML 中转页模式');
       
@@ -134,13 +157,9 @@
   
   // ===== 辅助函数 =====
   
-  function parseArgument(arg) {
-    if (typeof arg === 'object' && arg) {
-      return arg;
-    }
-    
+  function parseQueryString(str) {
     const result = {};
-    const argString = String(arg || '');
+    const argString = String(str || '');
     
     if (!argString) {
       return result;
