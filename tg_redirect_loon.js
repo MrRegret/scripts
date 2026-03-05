@@ -1,113 +1,139 @@
 /*
-  TG链接重定向脚本 (反混淆并修复版)
-  作者: 李悦柠
-  修复: Nicegram 和 Lingogram 的 URL Scheme
-  
-  使用方法:
-  1. 在 Surge/Loon/Quantumult X 中添加此脚本
-  2. 配置参数: tme_redirect=Nicegram (或其他客户端名称)
-  3. 访问 t.me 链接时会自动重定向到指定客户端
+  TG链接重定向脚本 - Loon 专用修复版
+  修复内容:
+  - Nicegram: ng -> nicegram
+  - Lingogram: lg -> lingogram
+  - 增强参数验证和防重定向循环保护
+  - 优化 Loon Argument 参数解析
 */
 
-// ===== 主函数 =====
 (function() {
-  // 解析脚本参数
-  const params = parseArgument($argument);
-  
-  // 获取重定向目标客户端 (支持多种参数名)
-  const redirectTarget = params['tme_redirect'] || 
-                        params['redirect'] || 
-                        params['client'] || 
-                        'Telegram';
-  
-  const targetClient = String(redirectTarget || 'Telegram');
-  
-  // 获取打开模式 (307重定向 或 HTML页面)
-  const openMode = String(params['open_mode'] || '307').toLowerCase();
-  
-  // 客户端URL Scheme映射 (✅ 已修复)
-  const CLIENT_SCHEMES = {
-    'Telegram': 'tg',
-    'Swiftgram': 'sg',
-    'Turrit': 'turrit',
-    'iMe': 'ime',
-    'Nicegram': 'nicegram',      // ✅ 修复: ng -> nicegram
-    'Lingogram': 'lingogram'      // ✅ 修复: lg -> lingogram
-  };
-  
-  // 获取目标客户端的URL Scheme
-  let scheme = CLIENT_SCHEMES[redirectTarget] || String(redirectTarget || '');
-  
-  if (!scheme) {
-    return $done({});
-  }
-  
-  // 如果scheme包含://，提取scheme部分
-  if (scheme.indexOf('://') >= 0) {
-    scheme = scheme.split('://')[1];
-  }
-  
-  // 获取请求URL
-  const requestUrl = $request && $request['url'] ? $request['url'] : '';
-  
-  let urlObj;
   try {
-    urlObj = new URL(requestUrl);
-  } catch (error) {
-    return $done({});
-  }
-  
-  // 检查是否已经处理过 (避免重复重定向)
-  if (urlObj['search'] && urlObj['searchParams']['get']('tg') === '0') {
-    return $done({});
-  }
-  
-  // 检查域名是否为 t.me 或 telegram.me
-  const hostname = String(urlObj['hostname'] || '').toLowerCase();
-  if (hostname !== 't.me' && hostname !== 'telegram.me') {
-    return $done({});
-  }
-  
-  // 构建重定向URL
-  const redirectUrl = buildRedirectUrl(scheme, urlObj);
-  
-  if (!redirectUrl) {
-    return $done({});
-  }
-  
-  // 根据打开模式返回不同响应
-  if (openMode === 'd9') {
-    // HTML页面模式 - 显示按钮和自动跳转
-    const cleanUrl = markUrlAsProcessed(urlObj['toString']());
-    const htmlPage = generateHtmlPage(redirectUrl, cleanUrl, scheme, targetClient, requestUrl);
+    // 解析参数
+    const params = parseArgument($argument);
+    console.log('[TG Redirect] 解析的参数:', JSON.stringify(params));
+    
+    // 获取重定向目标客户端 (转为小写以支持多种写法)
+    let redirectTarget = (params['tme_redirect'] || params['redirect'] || params['client'] || 'telegram').toLowerCase();
+    console.log('[TG Redirect] 目标客户端:', redirectTarget);
+    
+    // 获取打开模式
+    const openMode = String(params['open_mode'] || '307').toLowerCase();
+    console.log('[TG Redirect] 打开模式:', openMode);
+    
+    // 客户端URL Scheme映射 (使用小写键名以兼容各种输入)
+    const CLIENT_SCHEMES = {
+      'telegram': 'tg',
+      'swiftgram': 'sg',
+      'turrit': 'turrit',
+      'ime': 'ime',
+      'nicegram': 'nicegram',      // ✅ 修复: ng -> nicegram
+      'lingogram': 'lingogram'      // ✅ 修复: lg -> lingogram
+    };
+    
+    // 获取对应的URL Scheme
+    let scheme = CLIENT_SCHEMES[redirectTarget];
+    
+    // 如果找不到映射,尝试直接使用用户输入的值
+    if (!scheme) {
+      scheme = redirectTarget;
+    }
+    
+    console.log('[TG Redirect] 使用的 URL Scheme:', scheme);
+    
+    // 验证scheme有效性
+    if (!scheme || scheme === '' || scheme.includes('{') || scheme.includes('}')) {
+      console.log('[TG Redirect] ❌ 无效的 URL Scheme:', scheme);
+      return $done({});
+    }
+    
+    // 如果scheme包含://,提取scheme部分
+    if (scheme.indexOf('://') >= 0) {
+      scheme = scheme.split('://')[0];
+    }
+    
+    // 获取请求URL
+    const requestUrl = $request && $request.url ? $request.url : '';
+    console.log('[TG Redirect] 请求 URL:', requestUrl);
+    
+    if (!requestUrl) {
+      console.log('[TG Redirect] ❌ 无法获取请求 URL');
+      return $done({});
+    }
+    
+    // 解析URL
+    let urlObj;
+    try {
+      urlObj = new URL(requestUrl);
+    } catch (error) {
+      console.log('[TG Redirect] ❌ URL 解析失败:', error);
+      return $done({});
+    }
+    
+    // 防止重定向循环:检查是否已经处理过
+    if (urlObj.searchParams && urlObj.searchParams.get('tg') === '0') {
+      console.log('[TG Redirect] ⚠️ 检测到重定向循环标记,跳过处理');
+      return $done({});
+    }
+    
+    // 验证域名
+    const hostname = String(urlObj.hostname || '').toLowerCase();
+    if (hostname !== 't.me' && hostname !== 'telegram.me') {
+      console.log('[TG Redirect] ⚠️ 非 Telegram 域名:', hostname);
+      return $done({});
+    }
+    
+    // 构建重定向URL
+    const redirectUrl = buildRedirectUrl(scheme, urlObj);
+    
+    if (!redirectUrl) {
+      console.log('[TG Redirect] ❌ 无法构建重定向 URL');
+      return $done({});
+    }
+    
+    console.log('[TG Redirect] ✅ 重定向 URL:', redirectUrl);
+    
+    // 根据打开模式返回不同响应
+    if (openMode === '302' || openMode === 'd9') {
+      // HTML中转页模式
+      const cleanUrl = markUrlAsProcessed(urlObj.toString());
+      const htmlPage = generateHtmlPage(redirectUrl, cleanUrl, scheme, redirectTarget, requestUrl);
+      
+      console.log('[TG Redirect] 📄 使用 HTML 中转页模式');
+      
+      return $done({
+        response: {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store'
+          },
+          body: htmlPage
+        }
+      });
+    }
+    
+    // 默认: 307直接重定向模式
+    console.log('[TG Redirect] 🔄 使用 307 直接重定向模式');
     
     return $done({
-      'response': {
-        'status': 200,
-        'headers': {
-          'Content-Type': 'text/html; charset=utf-8',
+      response: {
+        status: 307,
+        headers: {
+          'Location': redirectUrl,
           'Cache-Control': 'no-store'
         },
-        'body': htmlPage
+        body: ''
       }
     });
+    
+  } catch (error) {
+    console.log('[TG Redirect] ❌ 脚本执行错误:', error);
+    return $done({});
   }
-  
-  // 默认: 307重定向模式
-  return $done({
-    'response': {
-      'status': 307,
-      'headers': {
-        'Location': redirectUrl,
-        'Cache-Control': 'no-store'
-      },
-      'body': ''
-    }
-  });
   
   // ===== 辅助函数 =====
   
-  // 解析脚本参数
   function parseArgument(arg) {
     if (typeof arg === 'object' && arg) {
       return arg;
@@ -136,18 +162,16 @@
     return result;
   }
   
-  // 标记URL为已处理 (添加 tg=0 参数)
   function markUrlAsProcessed(url) {
     try {
       const urlObj = new URL(url);
-      urlObj['searchParams']['set']('tg', '0');
-      return urlObj['toString']();
+      urlObj.searchParams.set('tg', '0');
+      return urlObj.toString();
     } catch (error) {
       return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'tg=0';
     }
   }
   
-  // 检查字符串是否只包含数字
   function isNumericString(str) {
     if (!str) return false;
     
@@ -161,12 +185,10 @@
     return true;
   }
   
-  // 构建重定向URL
   function buildRedirectUrl(scheme, urlObj) {
-    const pathParts = String(urlObj['pathname'] || '/').split('/');
+    const pathParts = String(urlObj.pathname || '/').split('/');
     const parts = [];
     
-    // 收集非空路径部分
     for (let i = 0; i < pathParts.length; i++) {
       if (pathParts[i]) {
         parts.push(pathParts[i]);
@@ -177,31 +199,26 @@
       return null;
     }
     
-    // 处理 /s/ 短链接
     if (parts[0] === 's' && parts.length > 1) {
       parts.shift();
     }
     
-    // 1. 处理 /joinchat/ 链接
     if (parts[0] === 'joinchat' && parts[1]) {
       return scheme + '://join?invite=' + encodeURIComponent(parts[1]);
     }
     
-    // 2. 处理 /+invite 链接
     if (parts[0].charAt(0) === '+' && parts[0].length > 1) {
       return scheme + '://join?invite=' + encodeURIComponent(parts[0].slice(1));
     }
     
-    // 3. 处理 /addstickers/ 链接
     if (parts[0] === 'addstickers' && parts[1]) {
       return scheme + '://addstickers?set=' + encodeURIComponent(parts[1]);
     }
     
-    // 4. 处理 /share/url 链接
     if (parts[0] === 'share' && parts[1] === 'url') {
       const queryParams = [];
-      const urlParam = urlObj['searchParams']['get']('url');
-      const textParam = urlObj['searchParams']['get']('text');
+      const urlParam = urlObj.searchParams.get('url');
+      const textParam = urlObj.searchParams.get('text');
       
       if (urlParam) {
         queryParams.push('url=' + encodeURIComponent(urlParam));
@@ -213,13 +230,11 @@
       return scheme + '://msg_url?' + queryParams.join('&');
     }
     
-    // 5. 处理 /c/channelId/postId 私密频道链接
     if (parts[0] === 'c' && parts[1] && parts[2] && 
         isNumericString(parts[1]) && isNumericString(parts[2])) {
       return scheme + '://privatepost?channel=' + parts[1] + '&post=' + parts[2];
     }
     
-    // 6. 处理普通用户名/频道链接
     const username = parts[0];
     if (!username) {
       return null;
@@ -228,20 +243,17 @@
     const queryParams = [];
     queryParams.push('domain=' + encodeURIComponent(username));
     
-    // 如果有消息ID，添加post参数
     if (parts[1] && isNumericString(parts[1])) {
       queryParams.push('post=' + parts[1]);
     }
     
-    // 添加URL中的其他查询参数
-    urlObj['searchParams']['forEach'](function(value, key) {
+    urlObj.searchParams.forEach(function(value, key) {
       queryParams.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
     });
     
     return scheme + '://resolve?' + queryParams.join('&');
   }
   
-  // HTML实体编码
   function htmlEscape(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -251,11 +263,9 @@
       .replace(/'/g, '&#39;');
   }
   
-  // 生成HTML页面
   function generateHtmlPage(redirectUrl, cleanUrl, scheme, client, originalUrl) {
     const escapedRedirectUrl = htmlEscape(redirectUrl);
     const escapedCleanUrl = htmlEscape(cleanUrl);
-    const escapedScheme = htmlEscape(scheme);
     const escapedClient = htmlEscape(client);
     const escapedOriginalUrl = htmlEscape(originalUrl);
     const jsonRedirectUrl = JSON.stringify(redirectUrl);
@@ -284,19 +294,9 @@
         <a class="btn" href="${escapedRedirectUrl}">在客户端内打开</a>
         <a class="btn" href="${escapedCleanUrl}">在浏览器中打开</a>
       </div>
-      <div class="info">
-        原始链接: ${escapedOriginalUrl}
-      </div>
+      <div class="info">原始链接: ${escapedOriginalUrl}</div>
     </section>
-
-    <script>
-      setTimeout(function(){window.location.href=${jsonRedirectUrl};},${timestamp});
-    </script>
-    
-    <footer style="position: fixed; bottom: 10px; width: 100%; text-align: center; color: white; font-size: 12px;">
-      <span>脚本作者: <a href="https://t.me/liyuening" target="_blank" rel="noopener noreferrer" style="color: white;">李悦柠</a></span>
-      <span>Powered by 李悦柠@liyuening</span>
-    </footer>
+    <script>setTimeout(function(){window.location.href=${jsonRedirectUrl};},${timestamp});</script>
   </main>
 </body>
 </html>`;
