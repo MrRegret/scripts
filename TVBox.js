@@ -1,7 +1,6 @@
 // 需要过滤的播放源名称
 const FILTERED_SOURCES = new Set(['qq', 'youku', 'mgtv', 'bilibili', 'qiyi', 'jsyun', 'dytt']);
-
-var WidgetMetadata = {
+WidgetMetadata = {
   id: "tvbox_aggregator",
   title: "TVBox资源聚合器",
   version: "1.0.0",
