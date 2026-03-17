@@ -13,9 +13,7 @@ WidgetMetadata = {
       title: "加载资源",
       functionName: "loadResource",
       type: "stream",
-      params: [
-        { name: "configUrl", type: "string", required: true }
-      ],
+      params: [],
     }
   ],
 };
