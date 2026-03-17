@@ -1,175 +1,170 @@
 /**
- * @name TVBox自定义聚合资源
- * @id forward.vod.tvbox_custom_aggregator
- * @version 1.3.0
- * @author Developer
- * @module vod
- * @description 请在设置中填入TVBox配置链接。支持全源同步搜索。
+ * WidgetMetadata 定义
+ * 类型为 stream，用于在播放详情页点击“加载资源”时触发
  */
+const WidgetMetadata = {
+  id: "vod_stream_custom_dynamic",
+  title: "自定义全源资源加载器",
+  icon: "https://assets.vvebo.vip/scripts/icon.png",
+  version: "1.0.4",
+  requiredVersion: "0.0.1",
+  description: "完全基于自定义配置链接解析资源，支持电影及电视剧剧集提取",
+  author: "AI",
+  site: "https://github.com/InchStudio/ForwardWidgets",
+  modules: [
+    {
+      id: "loadResource",
+      title: "加载资源",
+      functionName: "loadResource",
+      type: "stream",
+      params: [],
+    }
+  ],
+};
+
+// 需要排除的播放源标签
+const FILTERED_SOURCES = new Set(['qq', 'youku', 'mgtv', 'bilibili', 'qiyi', 'jsyun', 'dytt', 'tencent', 'iqiyi', 'letv', 'sohu']);
 
 const Widget = {
-    // 存储解析后的站点列表
-    sites: [],
+  /**
+   * UI 配置项
+   */
+  settings: [
+    {
+      key: "config_url",
+      title: "资源配置链接 (TVBox格式)",
+      type: "string",
+      default: "",
+      description: "请填入包含 sites 列表的 JSON 链接"
+    }
+  ],
 
-    // UI 配置项：用户必须在此处填入链接
-    settings: [
-        {
-            key: "config_url",
-            title: "TVBox配置链接",
-            type: "string",
-            default: "", // 初始为空
-            description: "请输入有效的 TVBox JSON 配置链接（需包含 sites 数组）"
+  /**
+   * 核心函数：由 Forward 客户端调用
+   */
+  async loadResource(params) {
+    const { seriesName, episode, type } = params;
+    if (!seriesName) return [];
+
+    // 1. 获取用户填写的配置链接
+    const configUrl = Widget.storage.get("config_url");
+    if (!configUrl) {
+      console.error("未配置资源链接，请在插件设置中填写");
+      return [];
+    }
+
+    const cleanedSeriesName = seriesName.trim();
+    console.log(`[搜索开始] 关键词: ${cleanedSeriesName}, 类型: ${type}, 目标集数: ${episode || '全集'}`);
+
+    // 2. 动态解析配置链接获取站点列表
+    let targetSites = [];
+    try {
+      const resp = await fetch(configUrl);
+      const text = await resp.text();
+      // 清理 JSON 注释
+      const cleanJson = JSON.parse(text.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, ""));
+      if (cleanJson && cleanJson.sites) {
+        // 只筛选 CMS 类型的站点 (type 0 或 1)
+        targetSites = cleanJson.sites.filter(s => s.type === 0 || s.type === 1);
+      }
+    } catch (e) {
+      console.error("解析配置链接失败: " + e.message);
+      return [];
+    }
+
+    if (targetSites.length === 0) return [];
+
+    const resources = [];
+    
+    // 3. 并发请求所有解析出来的站点
+    const searchTasks = targetSites.map(async (site) => {
+      try {
+        const connector = site.api.includes('?') ? '&' : '?';
+        const url = `${site.api}${connector}ac=detail&wd=${encodeURIComponent(cleanedSeriesName)}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.list) {
+          data.list.forEach(item => {
+            // 严格匹配名称，防止搜到关联词
+            if (item.vod_name.trim() !== cleanedSeriesName) return;
+
+            // 根据类型分流处理
+            if (type === 'movie' || item.type_id_1 == 1) {
+              this.methods.processMovie(item, site.name, resources);
+            } else {
+              this.methods.processTV(item, site.name, episode, resources);
+            }
+          });
         }
-    ],
+      } catch (e) {
+        // 忽略单站错误
+      }
+    });
+
+    await Promise.all(searchTasks);
+    console.log(`[搜索完成] 共从 ${targetSites.length} 个源中找到 ${resources.length} 条有效线路`);
+    return resources;
+  },
+
+  methods: {
+    /**
+     * 处理电影（提取所有非过滤源的直链）
+     */
+    processMovie(item, siteTitle, resources) {
+      const playSources = (item.vod_play_from || "").split('$$$');
+      const playUrls = (item.vod_play_url || "").split('$$$');
+
+      playSources.forEach((sourceName, idx) => {
+        // 过滤掉不需要的源
+        if (FILTERED_SOURCES.has(sourceName.toLowerCase())) return;
+
+        const episodes = (playUrls[idx] || "").split('#');
+        episodes.forEach(ep => {
+          if (!ep.includes('$')) return;
+          const [name, url] = ep.split('$');
+          if (url && url.startsWith('http')) {
+            resources.push({
+              name: `[${siteTitle}]`,
+              description: `${item.vod_name} - ${name} (${sourceName})`,
+              url: url.trim()
+            });
+          }
+        });
+      });
+    },
 
     /**
-     * 初始化：仅当配置链接存在时执行解析
+     * 处理电视剧（根据 episode 匹配集数）
      */
-    async init() {
-        const targetUrl = Widget.storage.get("config_url");
-        
-        // 如果用户没填链接，直接结束初始化
-        if (!targetUrl || targetUrl.trim() === "") {
-            console.warn("未检测到配置链接，请在插件设置中填入 URL");
-            this.sites = [];
-            return;
-        }
+    processTV(item, siteTitle, targetEpisode, resources) {
+      const playSources = (item.vod_play_from || "").split('$$$');
+      const playUrls = (item.vod_play_url || "").split('$$$');
 
-        try {
-            console.log("正在从自定义链接加载资源: " + targetUrl);
-            const response = await fetch(targetUrl);
-            const resText = await response.text();
-            
-            // 兼容性处理：移除 TVBox 配置文件中常见的 // 和 /* */ 注释
-            const cleanJsonText = resText.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, "");
-            const json = JSON.parse(cleanJsonText);
+      playSources.forEach((sourceName, idx) => {
+        if (FILTERED_SOURCES.has(sourceName.toLowerCase())) return;
 
-            if (json && json.sites) {
-                // 筛选 CMS 类型站点 (0: XML, 1: JSON)
-                this.sites = json.sites.filter(s => s.type === 0 || s.type === 1);
-                console.log(`成功解析到 ${this.sites.length} 个可用资源站`);
-            }
-        } catch (e) {
-            console.error("解析配置失败，请检查链接是否有效: " + e.message);
-            this.sites = [];
-        }
-    },
+        const episodes = (playUrls[idx] || "").split('#');
+        // 格式化目标集数，例如 1 -> 第01集
+        const episodePattern = targetEpisode ? `第${targetEpisode.toString().padStart(2, '0')}集` : null;
 
-    vod: {
-        /**
-         * 分类列表
-         */
-        async categories() {
-            // 每次打开分类尝试重新初始化（以防用户刚改了设置）
-            if (Widget.sites.length === 0) await Widget.init();
-            
-            if (Widget.sites.length === 0) {
-                return [{ id: "none", title: "请先在设置中配置链接" }];
-            }
+        episodes.forEach(ep => {
+          const [name, url] = ep.split('$');
+          if (!url) return;
 
-            return Widget.sites.map(site => ({
-                id: site.key,
-                title: site.name
-            }));
-        },
+          // 如果指定了集数，则检查标题是否包含
+          if (episodePattern && !name.includes(episodePattern)) return;
 
-        /**
-         * 获取具体站点的视频列表
-         */
-        async list(siteKey, page = 1) {
-            if (siteKey === "none") return [];
-            const site = Widget.sites.find(s => s.key === siteKey);
-            if (!site) return [];
-
-            return await Widget.methods.fetchFromCMS(site, `&pg=${page}`);
-        },
-
-        /**
-         * 全源检索：同步搜索配置中的所有站点
-         */
-        async search(keyword, page = 1) {
-            if (Widget.sites.length === 0) await Widget.init();
-            if (Widget.sites.length === 0) return [];
-
-            console.log(`全源检索中: ${keyword}`);
-
-            // 并发请求所有站点
-            const searchTasks = Widget.sites.map(async (site) => {
-                try {
-                    const results = await Widget.methods.fetchFromCMS(site, `&wd=${encodeURIComponent(keyword)}&pg=${page}`);
-                    // 为搜索结果增加站名标识
-                    return results.map(item => ({
-                        ...item,
-                        title: `[${site.name}] ${item.title}`
-                    }));
-                } catch (e) {
-                    return []; 
-                }
-            });
-
-            const allResults = await Promise.all(searchTasks);
-            return allResults.flat(); // 合并所有站点的结果
-        },
-
-        /**
-         * 详情与播放解析
-         */
-        async detail(combinedId) {
-            const [siteKey, vodId] = combinedId.split('###');
-            const site = Widget.sites.find(s => s.key === siteKey);
-            if (!site) throw new Error("来源站失效");
-
-            try {
-                const connector = site.api.includes('?') ? '&' : '?';
-                const resp = await fetch(`${site.api}${connector}ac=videolist&ids=${vodId}`);
-                const data = await resp.json();
-                const v = data.list[0];
-
-                return {
-                    title: v.vod_name,
-                    desc: v.vod_content ? v.vod_content.replace(/<[^>]+>/g, '') : "暂无简介",
-                    cover: v.vod_pic,
-                    playlists: v.vod_play_url.split('$
-```).map((line, i) => ({
-                        title: v.vod_play_from.split('$
-```)[i] || `线路${i+1}`,
-                        episodes: line.split('#').map(ep => {
-                            const parts = ep.split('
-```);
-                            return { 
-                                title: parts[0] || "播放", 
-                                url: parts[1] || parts[0] 
-                            };
-                        })
-                    }))
-                };
-            } catch (e) {
-                console.error("详情解析失败: " + e.message);
-                return null;
-            }
-        }
-    },
-
-    // 内部公共方法
-    methods: {
-        async fetchFromCMS(site, params) {
-            try {
-                const connector = site.api.includes('?') ? '&' : '?';
-                const url = `${site.api}${connector}ac=videolist${params}`;
-                const resp = await fetch(url);
-                const data = await resp.json();
-                
-                return (data.list || []).map(item => ({
-                    id: `${site.key}###${item.vod_id}`,
-                    title: item.vod_name,
-                    cover: item.vod_pic,
-                    subtitle: item.vod_remarks
-                }));
-            } catch (e) {
-                return [];
-            }
-        }
+          resources.push({
+            name: `[${siteTitle}]`,
+            description: `${item.vod_name} ${name} (${sourceName})`,
+            url: url.trim()
+          });
+        });
+      });
     }
+  }
 };
 
 export default Widget;
