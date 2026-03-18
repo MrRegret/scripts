@@ -36,9 +36,14 @@ dns-server =
 [host]
 
 [script]
-http-response ^https?:\/\/.+\.themoviedb\.org\/(?:movie|tv)\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-TMDB
-http-response ^https?:\/\/.+\.imdb\.com\/title\/tt\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-IMDb
-http-response ^https?:\/\/(?:movie|m)\.douban\.com\/(?:movie\/)?subject\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-Douban
+# TMDB
+http-request ^https?:\/\/.+\.themoviedb\.org\/(?:movie|tv)\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, tag=Forward-TMDB
+
+# IMDb
+http-request ^https?:\/\/.+\.imdb\.com\/title\/tt\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, tag=Forward-IMDb
+
+# 豆瓣
+http-response ^https?:\/\/(?:movie|m)\.douban\.com\/.*?\/subject\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=1, tag=Forward-Douban
 
 [mitm]
 hostname = *.themoviedb.org, *.imdb.com, *.douban.com
