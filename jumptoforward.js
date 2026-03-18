@@ -1,9 +1,9 @@
 
 const url = $request.url || ($response && $response.url);
 let urlScheme = '';
-let notificationTitle = '🎬 Forward';
+let notificationTitle = 'Forward';
 let notificationSubtitle = '';
-let notificationBody = '点击跳转到播放器';
+let notificationBody = '点击跳转到 🎬 Forward 观看';
 
 // TMDB 处理
 if (url.includes('themoviedb.org')) {
