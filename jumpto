@@ -1,0 +1,44 @@
+#!name= jumpto
+
+#!desc= 
+
+#!openurl=
+
+#!author= 
+
+#!homepage= 
+
+#!icon= 
+
+#!select = 
+
+#!select = 
+
+
+#!tag =分流
+
+[Argument]
+
+[General]
+
+bypass-tun =
+
+skip-proxy =
+
+real-ip =
+
+dns-server =
+
+[rule]
+
+[rewrite]
+http-response ^https?:\/\/.+\.themoviedb\.org\/(?:movie|tv)\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-TMDB
+http-response ^https?:\/\/.+\.imdb\.com\/title\/tt\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-IMDb
+http-response ^https?:\/\/.+\.douban\.com\/subject\/\d+ script-path=https://raw.githubusercontent.com/MrRegret/scripts/refs/heads/main/jumptoforward.js, requires-body=true, tag=Forward-Douban
+
+[host]
+
+[script]
+
+[mitm]
+hostname = *.themoviedb.org, *.imdb.com, *.douban.com
